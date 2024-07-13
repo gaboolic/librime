@@ -6,7 +6,7 @@ RIME: Rime Input Method Engine
 [![GitHub release](https://img.shields.io/github/release/rime/librime.svg)](https://github.com/rime/librime/releases)
 [![License](https://img.shields.io/badge/License-BSD%203--Clause-blue.svg)](https://opensource.org/licenses/BSD-3-Clause)
 
-Rime with your keystrokes.
+Rime with your keystroke s.
 
 Project home
 ---
