@@ -12,7 +12,7 @@ on:
   workflow_dispatch:
     inputs:
         repository:
-          default: ${{ github.repository }}
+          default: gaboolic/librime
           required: false
           type: string
         rime_plugins:
