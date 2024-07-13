@@ -57,7 +57,7 @@ jobs:
           
       - name: Create distributable
         run: |
-          make install
+          sudo make install
           tar -cjvf rime-${{ env.git_ref_name }}-${{ runner.os }}.tar.bz2 \
           dist version-info.txt
           tar -cjvf rime-deps-${{ env.git_ref_name }}-${{ runner.os }}.tar.bz2 \
