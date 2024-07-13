@@ -48,7 +48,7 @@ jobs:
         run: ./action-install-linux.sh
 
       - name: Install Rime plugins
-        run: ./install-plugins.sh
+        run: ./install-plugins.sh lotem/librime-octagram
 
       - name: Build and test
         run: make test
