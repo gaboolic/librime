@@ -9,6 +9,15 @@ on:
       rime_plugins:
         required: false
         type: string
+  workflow_dispatch:
+    inputs:
+        repository:
+          default: ${{ github.repository }}
+          required: false
+          type: string
+        rime_plugins:
+          required: false
+          type: string
 
 jobs:
   build:
