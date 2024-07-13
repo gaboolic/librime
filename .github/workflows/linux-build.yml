@@ -16,7 +16,7 @@ on:
           required: false
           type: string
         rime_plugins:
-          default: hchunhui/librime-lua lotem/librime-octagram rime/librime-predict
+          default: lotem/librime-octagram
           required: false
           type: string
 
@@ -35,7 +35,7 @@ jobs:
     env:
       CC: ${{ matrix.compiler }}
       CXX: ${{ matrix.cxx_compiler }}
-      RIME_PLUGINS: ${{ inputs.rime_plugins }}
+      RIME_PLUGINS: lotem/librime-octagram
 
     
     steps:
