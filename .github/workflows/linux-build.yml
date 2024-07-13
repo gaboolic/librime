@@ -25,6 +25,8 @@ jobs:
     env:
       CC: ${{ matrix.compiler }}
       CXX: ${{ matrix.cxx_compiler }}
+      RIME_PLUGINS: ${{ inputs.rime_plugins }}
+
     
     steps:
       - name: Checkout last commit
