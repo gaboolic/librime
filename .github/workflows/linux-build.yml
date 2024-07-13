@@ -6,6 +6,9 @@ on:
         default: ${{ github.repository }}
         required: false
         type: string
+      rime_plugins:
+        required: false
+        type: string
 
 jobs:
   build:
