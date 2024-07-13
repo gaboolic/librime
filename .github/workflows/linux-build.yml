@@ -16,6 +16,7 @@ on:
           required: false
           type: string
         rime_plugins:
+          default: hchunhui/librime-lua lotem/librime-octagram rime/librime-predict
           required: false
           type: string
 
