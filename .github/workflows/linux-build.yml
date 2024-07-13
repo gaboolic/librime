@@ -54,3 +54,19 @@ jobs:
         run: make test
         env:
           CMAKE_GENERATOR: Ninja
+          
+      - name: Create distributable
+        run: |
+          make install
+          tar -cjvf rime-${{ env.git_ref_name }}-${{ runner.os }}.tar.bz2 \
+          dist version-info.txt
+          tar -cjvf rime-deps-${{ env.git_ref_name }}-${{ runner.os }}.tar.bz2 \
+          --exclude '*/.placeholder' \
+          bin include lib share
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          path: |
+            rime-${{ env.git_ref_name }}-${{ runner.os }}.tar.bz2
+            rime-deps-${{ env.git_ref_name }}-${{ runner.os }}.tar.bz2
