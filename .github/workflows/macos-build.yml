@@ -77,7 +77,7 @@ jobs:
         run: |
           make install
           tar -cjvf rime-${{ env.git_ref_name }}-${{ runner.os }}-${{ matrix.build_variant || runner.arch }}.tar.bz2 \
-          dist version-info.txt
+          dist version-info.txt tools
           tar -cjvf rime-deps-${{ env.git_ref_name }}-${{ runner.os }}-${{ matrix.build_variant || runner.arch }}.tar.bz2 \
           --exclude '*/.placeholder' \
           bin include lib share tools
