@@ -77,10 +77,10 @@ jobs:
         run: |
           make install
           tar -cjvf rime-${{ env.git_ref_name }}-${{ runner.os }}-${{ matrix.build_variant || runner.arch }}.tar.bz2 \
-          dist version-info.txt tools rime-plugins bin
+          dist version-info.txt tools bin
           tar -cjvf rime-deps-${{ env.git_ref_name }}-${{ runner.os }}-${{ matrix.build_variant || runner.arch }}.tar.bz2 \
           --exclude '*/.placeholder' \
-          bin include lib share tools rime-plugins bin
+          bin include lib share tools bin
 
       - name: Upload artifacts
         if: matrix.create-distributable
