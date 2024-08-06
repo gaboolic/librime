@@ -77,11 +77,10 @@ jobs:
         run: |
           make install
           tar -cjvf rime-${{ env.git_ref_name }}-${{ runner.os }}-${{ matrix.build_variant || runner.arch }}.tar.bz2 \
-          dist version-info.txt tools bin
+          dist version-info.txt tools build
           tar -cjvf rime-deps-${{ env.git_ref_name }}-${{ runner.os }}-${{ matrix.build_variant || runner.arch }}.tar.bz2 \
           --exclude '*/.placeholder' \
-          bin include lib share tools bin
-          tar -cjvf rime-all-${{ env.git_ref_name }}-${{ runner.os }}-${{ matrix.build_variant || runner.arch }}.tar.bz2 .
+          bin include lib share tools build
 
       - name: Upload artifacts
         if: matrix.create-distributable
@@ -91,4 +90,3 @@ jobs:
           path: |
             rime-${{ env.git_ref_name }}-${{ runner.os }}-${{ matrix.build_variant || runner.arch }}.tar.bz2
             rime-deps-${{ env.git_ref_name }}-${{ runner.os }}-${{ matrix.build_variant || runner.arch }}.tar.bz2
-            rime-all-${{ env.git_ref_name }}-${{ runner.os }}-${{ matrix.build_variant || runner.arch }}.tar.bz2
