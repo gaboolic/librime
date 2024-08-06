@@ -44,14 +44,14 @@ jobs:
           CMAKE_GENERATOR: Ninja
 
       - name: Create distributable
-        if: matrix.create-distributable
+        
         run: |
           make install
           tar -cjvf rime-${{ env.git_ref_name }}-${{ runner.os }}-${{ matrix.build_variant || runner.arch }}.tar.bz2 \
           dist version-info.txt build
 
       - name: Upload artifacts
-        if: matrix.create-distributable
+        
         uses: actions/upload-artifact@v4
         with:
           name: artifact-${{ runner.os }}-${{ matrix.build_variant || runner.arch }}
