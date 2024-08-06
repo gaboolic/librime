@@ -20,8 +20,10 @@ jobs:
         include:
           - compiler: gcc
             cxx_compiler: g++
+            build_variant: gcc
           - compiler: clang
             cxx_compiler: clang++
+            build_variant: clang
     env:
       CC: ${{ matrix.compiler }}
       CXX: ${{ matrix.cxx_compiler }}
