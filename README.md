@@ -1,6 +1,6 @@
 <meta charset="UTF-8">
 
-RIME: Rime Input Method Engine
+RIME: Rime Input Method  Engine
 ===
 ![Build status](https://github.com/rime/librime/actions/workflows/commit-ci.yml/badge.svg)
 [![GitHub release](https://img.shields.io/github/release/rime/librime.svg)](https://github.com/rime/librime/releases)
