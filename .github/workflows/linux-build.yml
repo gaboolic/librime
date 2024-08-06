@@ -6,19 +6,6 @@ on:
         default: ${{ github.repository }}
         required: false
         type: string
-      rime_plugins:
-        required: false
-        type: string
-  workflow_dispatch:
-    inputs:
-        repository:
-          default: gaboolic/librime
-          required: false
-          type: string
-        rime_plugins:
-          default: lotem/librime-octagram
-          required: false
-          type: string
 
 jobs:
   build:
@@ -35,8 +22,6 @@ jobs:
     env:
       CC: ${{ matrix.compiler }}
       CXX: ${{ matrix.cxx_compiler }}
-      RIME_PLUGINS: lotem/librime-octagram
-
     
     steps:
       - name: Checkout last commit
@@ -54,19 +39,3 @@ jobs:
         run: make test
         env:
           CMAKE_GENERATOR: Ninja
-          
-      - name: Create distributable
-        run: |
-          sudo make install
-          tar -cjvf rime-${{ env.git_ref_name }}-${{ runner.os }}.tar.bz2 \
-          dist version-info.txt
-          tar -cjvf rime-deps-${{ env.git_ref_name }}-${{ runner.os }}.tar.bz2 \
-          --exclude '*/.placeholder' \
-          bin include lib share
-
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v3
-        with:
-          path: |
-            rime-${{ env.git_ref_name }}-${{ runner.os }}.tar.bz2
-            rime-deps-${{ env.git_ref_name }}-${{ runner.os }}.tar.bz2
