@@ -110,6 +110,10 @@ bool InstallationUpdate::Run(Deployer* deployer) {
       deployer->sync_dir = user_data_path / "sync";
     }
     LOG(INFO) << "sync dir: " << deployer->sync_dir;
+    bool backup_config_files;
+    if (config.GetBool("backup_config_files", &backup_config_files)) {
+      deployer->backup_config_files = backup_config_files;
+    }
     if (config.GetString("distribution_code_name", &last_distro_code_name)) {
       LOG(INFO) << "previous distribution: " << last_distro_code_name;
     }
@@ -433,8 +437,8 @@ bool ConfigFileUpdate::Run(Deployer* deployer) {
   path trash = user_data_path / "trash";
   if (TrashDeprecatedUserCopy(source_config_path, dest_config_path,
                               version_key_, trash)) {
-    LOG(INFO) << "deprecated user copy of '" << file_name_ << "' is moved to "
-              << trash;
+    LOG(WARNING) << "deprecated user copy of '" << file_name_
+                 << "' is moved to " << trash;
   }
   // build the config file if needs update
   the<Config> config(Config::Require("config")->Create(file_name_));
@@ -535,6 +539,10 @@ static bool IsCustomizedCopy(const path& file_path) {
 }
 
 bool BackupConfigFiles::Run(Deployer* deployer) {
+  if (!deployer->backup_config_files) {
+    LOG(INFO) << "skip backing up config files because it's disabled.";
+    return true;
+  }
   LOG(INFO) << "backing up config files.";
   const path user_data_path(deployer->user_data_dir);
   if (!fs::exists(user_data_path))
@@ -616,7 +624,7 @@ bool CleanupTrash::Run(Deployer* deployer) {
 bool CleanOldLogFiles::Run(Deployer* deployer) {
   bool success = true;
 #ifdef RIME_ENABLE_LOGGING
-  if (FLAGS_logtostderr) {
+  if (FLAGS_logtostderr || FLAGS_log_dir.empty()) {
     return success;
   }
 

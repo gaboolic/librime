@@ -30,7 +30,7 @@ struct DfsState {
   TickCount present_tick;
   Code code;
   vector<double> credibility;
-  map<int, DictEntryList> query_result;
+  hash_map<int, DictEntryList> query_result;
   an<DbAccessor> accessor;
   string key;
   string value;
@@ -43,7 +43,8 @@ struct DfsState {
   bool IsPrefixMatch(const string& prefix) {
     return boost::starts_with(key, prefix);
   }
-  void RecruitEntry(size_t pos, map<string, SyllableId>* syllabary = nullptr);
+  void RecruitEntry(size_t pos,
+                    hash_map<string, SyllableId>* syllabary = nullptr);
   bool NextEntry() {
     if (!accessor->GetNextRecord(&key, &value)) {
       key.clear();
@@ -68,7 +69,8 @@ struct DfsState {
   }
 };
 
-void DfsState::RecruitEntry(size_t pos, map<string, SyllableId>* syllabary) {
+void DfsState::RecruitEntry(size_t pos,
+                            hash_map<string, SyllableId>* syllabary) {
   string full_code;
   auto e = UserDictionary::CreateDictEntry(key, value, present_tick,
                                            credibility.back(),
@@ -292,7 +294,8 @@ void UserDictionary::DfsLookup(const SyllableGraph& syll_graph,
   }
 }
 
-static an<UserDictEntryCollector> collect(map<int, DictEntryList>* source) {
+static an<UserDictEntryCollector> collect(
+    hash_map<int, DictEntryList>* source) {
   auto result = New<UserDictEntryCollector>();
   for (auto& x : *source) {
     (*result)[x.first].SetEntries(std::move(x.second));
@@ -323,20 +326,20 @@ an<UserDictEntryCollector> UserDictionary::Lookup(
     return nullptr;
   // sort each group of homophones by weight
   for (auto& v : state.query_result) {
-    v.second.Sort();
-  }
-  auto entries_with_word_completion =
-      state.query_result.find(state.predict_word_from_depth);
-  if (entries_with_word_completion != state.query_result.end()) {
-    auto& entries = entries_with_word_completion->second;
-    // if the top candidate is predictive match,
-    if (!entries.empty() && entries.front()->IsPredictiveMatch()) {
-      auto found =
-          std::find_if(entries.begin(), entries.end(),
-                       [](const auto& e) { return e->IsExactMatch(); });
-      if (found != entries.end()) {
-        // move the first exact match candidate to top.
-        std::rotate(entries.begin(), found, found + 1);
+    auto& entries = v.second;
+    entries.Sort();
+    if (state.predict_word_from_depth) {
+      if (!entries.empty() && entries.front()->IsPredictiveMatch()) {
+        DLOG(INFO) << "front entry is predictive match: "
+                   << entries.front()->text;
+        auto found =
+            std::find_if(entries.begin(), entries.end(),
+                         [](const auto& e) { return e->IsExactMatch(); });
+        if (found != entries.end()) {
+          DLOG(INFO) << "rotating exact match entry to front: "
+                     << (*found)->text;
+          std::rotate(entries.begin(), found, found + 1);
+        }
       }
     }
   }
@@ -502,7 +505,10 @@ bool UserDictionary::TranslateCodeToString(const Code& code, string* result) {
     return false;
   result->clear();
   for (const SyllableId& syllable_id : code) {
-    string spelling = table_->GetSyllableById(syllable_id);
+    string spelling = rev_syllabary_.count(syllable_id)
+                          ? rev_syllabary_[syllable_id]
+                          : (rev_syllabary_[syllable_id] =
+                                 table_->GetSyllableById(syllable_id));
     if (spelling.empty()) {
       LOG(ERROR) << "Error translating syllable_id '" << syllable_id << "'.";
       result->clear();

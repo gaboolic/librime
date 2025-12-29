@@ -6,16 +6,17 @@
 //
 // 2011-07-10 GONG Chen <chen.sst@gmail.com>
 //
-#include <algorithm>
 #include <stack>
 #include <cmath>
 #include <boost/algorithm/string/join.hpp>
 #include <boost/range/adaptor/reversed.hpp>
+#include <rime/common.h>
 #include <rime/composition.h>
 #include <rime/candidate.h>
 #include <rime/config.h>
 #include <rime/context.h>
 #include <rime/engine.h>
+#include <rime/language.h>
 #include <rime/schema.h>
 #include <rime/translation.h>
 #include <rime/algo/syllabifier.h>
@@ -173,6 +174,8 @@ ScriptTranslator::ScriptTranslator(const Ticket& ticket)
     return;
   if (Config* config = engine_->schema()->config()) {
     config->GetInt(name_space_ + "/spelling_hints", &spelling_hints_);
+    config->GetInt(name_space_ + "/max_word_length", &max_word_length_);
+    config->GetInt(name_space_ + "/core_word_length", &core_word_length_);
     config->GetBool(name_space_ + "/always_show_comments",
                     &always_show_comments_);
     config->GetBool(name_space_ + "/enable_correction", &enable_correction_);
@@ -194,7 +197,7 @@ an<Translation> ScriptTranslator::Query(const string& input,
                                         const Segment& segment) {
   if (!dict_ || !dict_->loaded())
     return nullptr;
-  if (!segment.HasTag(tag_))
+  if (!segment.HasAnyTagIn(tags_))
     return nullptr;
   DLOG(INFO) << "input = '" << input << "', [" << segment.start << ", "
              << segment.end << ")";
@@ -219,6 +222,71 @@ an<Translation> ScriptTranslator::Query(const string& input,
   return deduped;
 }
 
+int ScriptTranslator::core_word_length() const {
+  if (max_word_length_ <= 0) {
+    return core_word_length_;
+  }
+  return std::min(core_word_length_, max_word_length_);
+}
+
+static bool exceed_upperlimit(int length, int upper_limit) {
+  return upper_limit > 0 && length > upper_limit;
+}
+
+bool ScriptTranslator::SaveCommitEntry(CommitEntry& commit_entry) {
+  if (exceed_upperlimit(commit_entry.Length(), max_word_length())) {
+    UpdateElements(commit_entry);
+  } else {
+    commit_entry.Save();
+  }
+  return true;
+}
+
+bool ScriptTranslator::ConcatenatePhrases(CommitEntry& commit_entry,
+                                          const vector<an<Phrase>>& phrases) {
+  const int kCoreWordLength = core_word_length();
+  const int n = phrases.size();
+  for (int i = 0; i < n; ++i) {
+    int cur_len = 0;
+    int j = i;
+    for (; j < n; ++j) {
+      commit_entry.AppendPhrase(phrases.at(j));
+      cur_len += phrases.at(j)->code().size();
+      if (kCoreWordLength <= 0 || cur_len > kCoreWordLength) {
+        break;
+      }
+      SaveCommitEntry(commit_entry);
+    }
+    if (kCoreWordLength > 0) {
+      if (j == i) {
+        SaveCommitEntry(commit_entry);
+      }
+      commit_entry.Clear();
+    }
+  }
+  SaveCommitEntry(commit_entry);
+  commit_entry.Clear();
+
+  return true;
+}
+
+bool ScriptTranslator::ProcessSegmentOnCommit(CommitEntry& commit_entry,
+                                              const Segment& seg) {
+  auto phrase =
+      As<Phrase>(Candidate::GetGenuineCandidate(seg.GetSelectedCandidate()));
+  bool recognized = Language::intelligible(phrase, this);
+  if (recognized) {
+    queue_.push_back(phrase);
+  }
+
+  if (!recognized || seg.status >= Segment::kConfirmed) {
+    ConcatenatePhrases(commit_entry, queue_);
+    queue_.clear();
+  }
+
+  return true;
+}
+
 string ScriptTranslator::FormatPreedit(const string& preedit) {
   string result = preedit;
   preedit_formatter_.Apply(&result);
@@ -241,7 +309,7 @@ string ScriptTranslator::GetPrecedingText(size_t start) const {
                      : engine_->context()->commit_history().latest_text();
 }
 
-bool ScriptTranslator::Memorize(const CommitEntry& commit_entry) {
+bool ScriptTranslator::UpdateElements(const CommitEntry& commit_entry) {
   bool update_elements = false;
   // avoid updating single character entries within a phrase which is
   // composed with single characters only
@@ -258,6 +326,11 @@ bool ScriptTranslator::Memorize(const CommitEntry& commit_entry) {
       user_dict_->UpdateEntry(*e, 0);
     }
   }
+  return true;
+}
+
+bool ScriptTranslator::Memorize(const CommitEntry& commit_entry) {
+  UpdateElements(commit_entry);
   user_dict_->UpdateEntry(commit_entry, 1);
   return true;
 }
@@ -368,7 +441,8 @@ bool ScriptTranslation::Evaluate(Dictionary* dict, UserDictionary* user_dict) {
   bool predict_word = translator_->enable_word_completion() &&
                       start_ + consumed == end_of_input_;
 
-  phrase_ = dict->Lookup(syllable_graph, 0, predict_word);
+  phrase_ =
+      dict->Lookup(syllable_graph, 0, &translator_->blacklist(), predict_word);
   if (user_dict) {
     const size_t kUnlimitedDepth = 0;
     const size_t kNumSyllablesToPredictWord = 4;
@@ -578,7 +652,8 @@ an<Sentence> ScriptTranslation::MakeSentence(Dictionary* dict,
                                       kMaxSyllablesForUserPhraseQuery));
     }
     // merge lookup results
-    EnrollEntries(same_start_pos, dict->Lookup(syllable_graph, x.first));
+    EnrollEntries(same_start_pos, dict->Lookup(syllable_graph, x.first,
+                                               &translator_->blacklist()));
   }
   if (auto sentence =
           poet_->MakeSentence(graph, syllable_graph.interpreted_length,

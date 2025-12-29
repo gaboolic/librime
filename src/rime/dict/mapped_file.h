@@ -80,7 +80,7 @@ struct List {
 
 class MappedFileImpl;
 
-class RIME_API MappedFile {
+class RIME_DLL MappedFile {
  protected:
   explicit MappedFile(const path& file_path);
   virtual ~MappedFile();
@@ -145,7 +145,7 @@ T* MappedFile::Allocate(size_t count) {
       return NULL;
   }
   T* ptr = reinterpret_cast<T*>(address() + used_space);
-  std::memset(ptr, 0, required_space);
+  std::memset((void*)ptr, 0, required_space);
   size_ = used_space + required_space;
   return ptr;
 }

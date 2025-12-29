@@ -3,19 +3,23 @@ name: Commit CI
 on:
   push:
     branches:
-      - '!master'
-    tags:
-      - '![0-9]+.*'
+      - '**'
+    tags-ignore:
+      - '**'
   pull_request:
+  workflow_dispatch:
 
 jobs:
   lint:
-    runs-on: macos-14
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout last commit
-        uses: actions/checkout@v4
-      - name: Install latest lang-format
-        run: brew update && brew install clang-format
+        uses: actions/checkout@v5
+
+      - name: Install clang-format-18
+        run: |
+          ./action-install-clang-format.sh 18
+
       - name: Code style lint
         run: make clang-format-lint
 
