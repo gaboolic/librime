@@ -7,6 +7,7 @@
 #ifndef RIME_SCRIPT_TRANSLATOR_H_
 #define RIME_SCRIPT_TRANSLATOR_H_
 
+#include <algorithm>
 #include <rime/common.h>
 #include <rime/translation.h>
 #include <rime/translator.h>
@@ -47,6 +48,9 @@ class ScriptTranslator : public Translator,
 
   // options
   int max_homophones() const { return max_homophones_; }
+  int sentence_max_homophones() const {
+    return (std::max)(max_homophones_, sentence_max_homophones_);
+  }
   int spelling_hints() const { return spelling_hints_; }
   bool always_show_comments() const { return always_show_comments_; }
   bool enable_word_completion() const { return enable_word_completion_; }
@@ -55,6 +59,7 @@ class ScriptTranslator : public Translator,
 
  protected:
   int max_homophones_ = 1;
+  int sentence_max_homophones_ = 8;
   int spelling_hints_ = 0;
   int max_word_length_ = 0;
   int core_word_length_ = 0;

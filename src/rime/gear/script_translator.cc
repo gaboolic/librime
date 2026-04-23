@@ -135,7 +135,8 @@ class ScriptTranslation : public Translation {
   bool PrepareCandidate();
   template <class QueryResult>
   void EnrollEntries(map<int, DictEntryList>& entries_by_end_pos,
-                     const an<QueryResult>& query_result);
+                     const an<QueryResult>& query_result,
+                     size_t max_entries);
   vector<an<Sentence>> MakeSentences(Dictionary* dict,
                                      UserDictionary* user_dict);
 
@@ -187,6 +188,8 @@ ScriptTranslator::ScriptTranslator(const Ticket& ticket)
       enable_word_completion_ = enable_completion_;
     }
     config->GetInt(name_space_ + "/max_homophones", &max_homophones_);
+    config->GetInt(name_space_ + "/sentence_max_homophones",
+                   &sentence_max_homophones_);
     poet_.reset(new Poet(language(), config));
   }
   if (enable_correction_) {
@@ -483,9 +486,10 @@ bool ScriptTranslation::Evaluate(Dictionary* dict, UserDictionary* user_dict) {
              << ", has_reliable_phrase: " << has_reliable_phrase
              << ", has_reliable_user_phrase: " << has_reliable_user_phrase
              << ", has_at_least_two_syllables: " << has_at_least_two_syllables;
-  // make sentences when there is no exact-matching phrase candidate
-  if (has_at_least_two_syllables && !has_reliable_phrase &&
-      !has_reliable_user_phrase) {
+  // Keep sentence candidates even when there is an exact user phrase, so the
+  // menu can show both the memorized phrase and alternative whole-sentence
+  // paths. An exact system phrase still suppresses sentence making.
+  if (has_at_least_two_syllables && !has_reliable_phrase) {
     sentences_ = MakeSentences(dict, user_dict);
   }
 
@@ -664,12 +668,12 @@ bool ScriptTranslation::CheckEmpty() {
 template <class QueryResult>
 void ScriptTranslation::EnrollEntries(
     map<int, DictEntryList>& entries_by_end_pos,
-    const an<QueryResult>& query_result) {
+    const an<QueryResult>& query_result,
+    size_t max_entries) {
   if (query_result) {
     for (auto& y : *query_result) {
       DictEntryList& homophones = entries_by_end_pos[y.first];
-      while (homophones.size() < translator_->max_homophones() &&
-             !y.second.exhausted()) {
+      while (homophones.size() < max_entries && !y.second.exhausted()) {
         homophones.push_back(y.second.Peek());
         if (!y.second.Next())
           break;
@@ -682,6 +686,8 @@ vector<an<Sentence>> ScriptTranslation::MakeSentences(Dictionary* dict,
                                                       UserDictionary* user_dict) {
   vector<an<Sentence>> sentences;
   const int kMaxSyllablesForUserPhraseQuery = 5;
+  const size_t sentence_max_homophones =
+      translator_->sentence_max_homophones();
   const auto& syllable_graph = syllabifier_->syllable_graph();
   WordGraph graph;
   for (const auto& x : syllable_graph.edges) {
@@ -689,11 +695,13 @@ vector<an<Sentence>> ScriptTranslation::MakeSentences(Dictionary* dict,
     if (user_dict) {
       EnrollEntries(same_start_pos,
                     user_dict->Lookup(syllable_graph, x.first,
-                                      kMaxSyllablesForUserPhraseQuery));
+                                      kMaxSyllablesForUserPhraseQuery),
+                    sentence_max_homophones);
     }
     // merge lookup results
     EnrollEntries(same_start_pos, dict->Lookup(syllable_graph, x.first,
-                                               &translator_->blacklist()));
+                                               &translator_->blacklist()),
+                  sentence_max_homophones);
   }
   auto candidates = poet_->MakeSentences(
       graph, syllable_graph.interpreted_length,
