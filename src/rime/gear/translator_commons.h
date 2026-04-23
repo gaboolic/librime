@@ -165,6 +165,10 @@ class TranslatorOptions {
   void set_strict_spelling(bool is_strict) { strict_spelling_ = is_strict; }
   double initial_quality() const { return initial_quality_; }
   void set_initial_quality(double quality) { initial_quality_ = quality; }
+  size_t sentence_candidates_limit() const { return sentence_candidates_limit_; }
+  void set_sentence_candidates_limit(int limit) {
+    sentence_candidates_limit_ = limit > 0 ? static_cast<size_t>(limit) : 1;
+  }
   Projection& preedit_formatter() { return preedit_formatter_; }
   Projection& comment_formatter() { return comment_formatter_; }
   const hash_set<string>& blacklist() { return blacklist_; }
@@ -176,6 +180,7 @@ class TranslatorOptions {
   bool enable_completion_ = true;
   bool strict_spelling_ = false;
   double initial_quality_ = 0.;
+  size_t sentence_candidates_limit_ = 3;
   Projection preedit_formatter_;
   Projection comment_formatter_;
   Patterns user_dict_disabling_patterns_;

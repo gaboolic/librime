@@ -16,3 +16,6 @@ node_modules/
 .cache/
 *.7z
 .DS_Store
+build-bert-grammar
+deps
+releases

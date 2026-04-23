@@ -116,6 +116,7 @@ TranslatorOptions::TranslatorOptions(const Ticket& ticket) {
   if (!ticket.schema)
     return;
   if (Config* config = ticket.schema->config()) {
+    int sentence_candidates_limit = static_cast<int>(sentence_candidates_limit_);
     config->GetString(ticket.name_space + "/delimiter", &delimiters_) ||
         config->GetString("speller/delimiter", &delimiters_);
     config->GetBool(ticket.name_space + "/contextual_suggestions",
@@ -125,6 +126,10 @@ TranslatorOptions::TranslatorOptions(const Ticket& ticket) {
     config->GetBool(ticket.name_space + "/strict_spelling", &strict_spelling_);
     config->GetDouble(ticket.name_space + "/initial_quality",
                       &initial_quality_);
+    if (config->GetInt(ticket.name_space + "/sentence_candidates_limit",
+                       &sentence_candidates_limit)) {
+      set_sentence_candidates_limit(sentence_candidates_limit);
+    }
     preedit_formatter_.Load(
         config->GetList(ticket.name_space + "/preedit_format"));
     comment_formatter_.Load(

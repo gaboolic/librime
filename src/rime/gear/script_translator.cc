@@ -136,7 +136,8 @@ class ScriptTranslation : public Translation {
   template <class QueryResult>
   void EnrollEntries(map<int, DictEntryList>& entries_by_end_pos,
                      const an<QueryResult>& query_result);
-  an<Sentence> MakeSentence(Dictionary* dict, UserDictionary* user_dict);
+  vector<an<Sentence>> MakeSentences(Dictionary* dict,
+                                     UserDictionary* user_dict);
 
   ScriptTranslator* translator_;
   Poet* poet_;
@@ -146,7 +147,8 @@ class ScriptTranslation : public Translation {
 
   an<DictEntryCollector> phrase_;
   an<UserDictEntryCollector> user_phrase_;
-  an<Sentence> sentence_;
+  vector<an<Sentence>> sentences_;
+  size_t sentence_index_ = 0;
 
   an<Phrase> candidate_ = nullptr;
   size_t candidate_index_ = 0;
@@ -484,7 +486,7 @@ bool ScriptTranslation::Evaluate(Dictionary* dict, UserDictionary* user_dict) {
   // make sentences when there is no exact-matching phrase candidate
   if (has_at_least_two_syllables && !has_reliable_phrase &&
       !has_reliable_user_phrase) {
-    sentence_ = MakeSentence(dict, user_dict);
+    sentences_ = MakeSentences(dict, user_dict);
   }
 
   return !CheckEmpty();
@@ -501,7 +503,7 @@ bool ScriptTranslation::Next() {
       case kUninitialized:
         break;
       case kSentence:
-        sentence_.reset();
+        ++sentence_index_;
         break;
       case kUserPhrase: {
         UserDictEntryIterator& uter(user_phrase_iter_->second);
@@ -575,9 +577,9 @@ iter_incremented:
     candidate_ = nullptr;
     return false;
   }
-  if (sentence_) {
+  if (sentence_index_ < sentences_.size()) {
     candidate_source_ = kSentence;
-    candidate_ = sentence_;
+    candidate_ = sentences_[sentence_index_];
     return true;
   }
   const size_t full_code_length = end_of_input_ - start_;
@@ -653,7 +655,8 @@ iter_incremented:
 }
 
 bool ScriptTranslation::CheckEmpty() {
-  set_exhausted((!phrase_ || phrase_iter_ == phrase_->rend()) &&
+  set_exhausted(sentence_index_ >= sentences_.size() &&
+                (!phrase_ || phrase_iter_ == phrase_->rend()) &&
                 (!user_phrase_ || user_phrase_iter_ == user_phrase_->rend()));
   return exhausted();
 }
@@ -675,8 +678,9 @@ void ScriptTranslation::EnrollEntries(
   }
 }
 
-an<Sentence> ScriptTranslation::MakeSentence(Dictionary* dict,
-                                             UserDictionary* user_dict) {
+vector<an<Sentence>> ScriptTranslation::MakeSentences(Dictionary* dict,
+                                                      UserDictionary* user_dict) {
+  vector<an<Sentence>> sentences;
   const int kMaxSyllablesForUserPhraseQuery = 5;
   const auto& syllable_graph = syllabifier_->syllable_graph();
   WordGraph graph;
@@ -691,14 +695,17 @@ an<Sentence> ScriptTranslation::MakeSentence(Dictionary* dict,
     EnrollEntries(same_start_pos, dict->Lookup(syllable_graph, x.first,
                                                &translator_->blacklist()));
   }
-  if (auto sentence =
-          poet_->MakeSentence(graph, syllable_graph.interpreted_length,
-                              translator_->GetPrecedingText(start_))) {
+  auto candidates = poet_->MakeSentences(
+      graph, syllable_graph.interpreted_length,
+      translator_->GetPrecedingText(start_),
+      translator_->sentence_candidates_limit());
+  sentences.reserve(candidates.size());
+  for (auto& sentence : candidates) {
     sentence->Offset(start_);
     sentence->set_syllabifier(syllabifier_);
-    return sentence;
+    sentences.push_back(sentence);
   }
-  return nullptr;
+  return sentences;
 }
 
 }  // namespace rime

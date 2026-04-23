@@ -36,6 +36,10 @@ class Poet {
        Compare compare = CompareWeight);
   ~Poet();
 
+  vector<an<Sentence>> MakeSentences(const WordGraph& graph,
+                                     size_t total_length,
+                                     const string& preceding_text,
+                                     size_t limit);
   an<Sentence> MakeSentence(const WordGraph& graph,
                             size_t total_length,
                             const string& preceding_text);
@@ -57,10 +61,12 @@ class Poet {
   }
 
  private:
+  an<Sentence> MakeSentenceFromLine(const Line& line) const;
   template <class Strategy>
-  an<Sentence> MakeSentenceWithStrategy(const WordGraph& graph,
-                                        size_t total_length,
-                                        const string& preceding_text);
+  vector<an<Sentence>> MakeSentencesWithStrategy(const WordGraph& graph,
+                                                 size_t total_length,
+                                                 const string& preceding_text,
+                                                 size_t limit);
 
   const Language* language_;
   the<Grammar> grammar_;

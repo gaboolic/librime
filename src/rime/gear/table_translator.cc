@@ -386,7 +386,7 @@ Spans SentenceSyllabifier::Syllabify(const Phrase* phrase) {
 class SentenceTranslation : public Translation {
  public:
   SentenceTranslation(TableTranslator* translator,
-                      an<Sentence>&& sentence,
+                      vector<an<Sentence>>&& sentences,
                       DictEntryCollector&& collector,
                       UserDictEntryCollector&& ucollector,
                       const string& input,
@@ -395,12 +395,13 @@ class SentenceTranslation : public Translation {
   virtual an<Candidate> Peek();
 
  protected:
-  void PrepareSentence();
+  void PrepareSentence(const an<Sentence>& sentence);
   bool CheckEmpty();
   bool PreferUserPhrase() const;
 
   TableTranslator* translator_;
-  an<Sentence> sentence_;
+  vector<an<Sentence>> sentences_;
+  size_t sentence_index_ = 0;
   DictEntryCollector collector_;
   UserDictEntryCollector user_phrase_collector_;
   string input_;
@@ -408,24 +409,26 @@ class SentenceTranslation : public Translation {
 };
 
 SentenceTranslation::SentenceTranslation(TableTranslator* translator,
-                                         an<Sentence>&& sentence,
+                                         vector<an<Sentence>>&& sentences,
                                          DictEntryCollector&& collector,
                                          UserDictEntryCollector&& ucollector,
                                          const string& input,
                                          size_t start)
     : translator_(translator),
-      sentence_(std::move(sentence)),
+      sentences_(std::move(sentences)),
       collector_(std::move(collector)),
       user_phrase_collector_(std::move(ucollector)),
       input_(input),
       start_(start) {
-  PrepareSentence();
+  for (const auto& sentence : sentences_) {
+    PrepareSentence(sentence);
+  }
   CheckEmpty();
 }
 
 bool SentenceTranslation::Next() {
-  if (sentence_) {
-    sentence_.reset();
+  if (sentence_index_ < sentences_.size()) {
+    ++sentence_index_;
     return !CheckEmpty();
   }
   if (PreferUserPhrase()) {
@@ -445,8 +448,8 @@ bool SentenceTranslation::Next() {
 an<Candidate> SentenceTranslation::Peek() {
   if (exhausted())
     return nullptr;
-  if (sentence_) {
-    return sentence_;
+  if (sentence_index_ < sentences_.size()) {
+    return sentences_[sentence_index_];
   }
   size_t code_length = 0;
   an<DictEntry> entry;
@@ -471,12 +474,12 @@ an<Candidate> SentenceTranslation::Peek() {
   return result;
 }
 
-void SentenceTranslation::PrepareSentence() {
-  if (!sentence_)
+void SentenceTranslation::PrepareSentence(const an<Sentence>& sentence) {
+  if (!sentence)
     return;
-  sentence_->Offset(start_);
-  sentence_->set_comment(kUnitySymbol);
-  sentence_->set_syllabifier(New<SentenceSyllabifier>());
+  sentence->Offset(start_);
+  sentence->set_comment(kUnitySymbol);
+  sentence->set_syllabifier(New<SentenceSyllabifier>());
 
   if (!translator_)
     return;
@@ -484,7 +487,7 @@ void SentenceTranslation::PrepareSentence() {
   const string& delimiters(translator_->delimiters());
   // split syllables
   size_t pos = 0;
-  for (int len : sentence_->word_lengths()) {
+  for (size_t len : sentence->word_lengths()) {
     if (pos > 0 && delimiters.find(preedit[pos - 1]) == string::npos) {
       preedit.insert(pos, 1, ' ');
       ++pos;
@@ -492,19 +495,19 @@ void SentenceTranslation::PrepareSentence() {
     pos += len;
   }
   translator_->preedit_formatter().Apply(&preedit);
-  sentence_->set_preedit(preedit);
+  sentence->set_preedit(preedit);
 }
 
 bool SentenceTranslation::CheckEmpty() {
-  set_exhausted(!sentence_ && collector_.empty() &&
+  set_exhausted(sentence_index_ >= sentences_.size() && collector_.empty() &&
                 user_phrase_collector_.empty());
   return exhausted();
 }
 
 bool SentenceTranslation::PreferUserPhrase() const {
   // compare code length
-  int user_phrase_code_length = 0;
-  int table_code_length = 0;
+  size_t user_phrase_code_length = 0;
+  size_t table_code_length = 0;
   if (!user_phrase_collector_.empty()) {
     user_phrase_code_length = user_phrase_collector_.rbegin()->first;
   }
@@ -671,10 +674,12 @@ an<Translation> TableTranslator::MakeSentence(const string& input,
       }
     }
   }
-  if (auto sentence =
-          poet_->MakeSentence(graph, input.length(), GetPrecedingText(start))) {
+  auto sentences = poet_->MakeSentences(
+      graph, input.length(), GetPrecedingText(start),
+      sentence_candidates_limit());
+  if (!sentences.empty()) {
     auto result = Cached<SentenceTranslation>(
-        this, std::move(sentence), std::move(collector),
+        this, std::move(sentences), std::move(collector),
         std::move(user_phrase_collector), input, start);
     if (result && filter_by_charset) {
       return New<CharsetFilterTranslation>(result);

@@ -110,19 +110,21 @@ bool Poet::LeftAssociateCompare(const Line& one, const Line& other) {
 // keep the best line candidate per last phrase
 using LineCandidates = hash_map<string, Line>;
 
-template <int N>
 static vector<const Line*> find_top_candidates(const LineCandidates& candidates,
-                                               Poet::Compare compare) {
+                                               Poet::Compare compare,
+                                               size_t limit) {
   vector<const Line*> top;
-  top.reserve(N + 1);
+  if (limit == 0)
+    return top;
+  top.reserve(limit + 1);
   for (const auto& candidate : candidates) {
     auto pos = std::upper_bound(
         top.begin(), top.end(), &candidate.second,
         [&](const Line* a, const Line* b) { return compare(*b, *a); });  // desc
-    if (pos - top.begin() >= N)
+    if (static_cast<size_t>(pos - top.begin()) >= limit)
       continue;
     top.insert(pos, &candidate.second);
-    if (top.size() > N)
+    if (top.size() > limit)
       top.pop_back();
   }
   return top;
@@ -142,8 +144,7 @@ struct BeamSearch {
   static void ForEachCandidate(const State& state,
                                Poet::Compare compare,
                                UpdateLineCandidate update) {
-    auto top_candidates =
-        find_top_candidates<kMaxLineCandidates>(state, compare);
+    auto top_candidates = find_top_candidates(state, compare, kMaxLineCandidates);
     for (const auto* candidate : top_candidates) {
       update(*candidate);
     }
@@ -163,6 +164,12 @@ struct BeamSearch {
       }
     }
     return best ? *best : Line::kEmpty;
+  }
+
+  static vector<const Line*> TopLinesInState(const State& final_state,
+                                             Poet::Compare compare,
+                                             size_t limit) {
+    return find_top_candidates(final_state, compare, limit);
   }
 };
 
@@ -185,12 +192,37 @@ struct DynamicProgramming {
                                      Poet::Compare compare) {
     return final_state;
   }
+
+  static vector<const Line*> TopLinesInState(const State& final_state,
+                                             Poet::Compare compare,
+                                             size_t limit) {
+    if (limit == 0 || final_state.empty())
+      return {};
+    return {&final_state};
+  }
 };
 
+an<Sentence> Poet::MakeSentenceFromLine(const Line& line) const {
+  if (line.empty())
+    return nullptr;
+  auto sentence = New<Sentence>(language_);
+  for (const auto* c : line.components()) {
+    if (!c->entry)
+      continue;
+    sentence->Extend(*c->entry, c->end_pos, c->weight);
+  }
+  return sentence;
+}
+
 template <class Strategy>
-an<Sentence> Poet::MakeSentenceWithStrategy(const WordGraph& graph,
-                                            size_t total_length,
-                                            const string& preceding_text) {
+vector<an<Sentence>> Poet::MakeSentencesWithStrategy(
+    const WordGraph& graph,
+    size_t total_length,
+    const string& preceding_text,
+    size_t limit) {
+  vector<an<Sentence>> sentences;
+  if (limit == 0)
+    return sentences;
   map<int, typename Strategy::State> states;
   Strategy::Initiate(states[0]);
   for (const auto& sv : graph) {
@@ -231,24 +263,32 @@ an<Sentence> Poet::MakeSentenceWithStrategy(const WordGraph& graph,
   }
   auto found = states.find(total_length);
   if (found == states.end() || found->second.empty())
-    return nullptr;
-  const Line& best = Strategy::BestLineInState(found->second, compare_);
-  auto sentence = New<Sentence>(language_);
-  for (const auto* c : best.components()) {
-    if (!c->entry)
-      continue;
-    sentence->Extend(*c->entry, c->end_pos, c->weight);
+    return sentences;
+  auto top_lines = Strategy::TopLinesInState(found->second, compare_, limit);
+  sentences.reserve(top_lines.size());
+  for (const auto* line : top_lines) {
+    if (auto sentence = MakeSentenceFromLine(*line)) {
+      sentences.push_back(sentence);
+    }
   }
-  return sentence;
+  return sentences;
+}
+
+vector<an<Sentence>> Poet::MakeSentences(const WordGraph& graph,
+                                         size_t total_length,
+                                         const string& preceding_text,
+                                         size_t limit) {
+  return grammar_ ? MakeSentencesWithStrategy<BeamSearch>(graph, total_length,
+                                                          preceding_text, limit)
+                  : MakeSentencesWithStrategy<DynamicProgramming>(
+                        graph, total_length, preceding_text, 1);
 }
 
 an<Sentence> Poet::MakeSentence(const WordGraph& graph,
                                 size_t total_length,
                                 const string& preceding_text) {
-  return grammar_ ? MakeSentenceWithStrategy<BeamSearch>(graph, total_length,
-                                                         preceding_text)
-                  : MakeSentenceWithStrategy<DynamicProgramming>(
-                        graph, total_length, preceding_text);
+  auto sentences = MakeSentences(graph, total_length, preceding_text, 1);
+  return sentences.empty() ? nullptr : sentences.front();
 }
 
 }  // namespace rime
