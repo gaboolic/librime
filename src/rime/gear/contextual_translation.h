@@ -4,6 +4,7 @@
 //
 
 #include <rime/common.h>
+#include <rime/gear/grammar.h>
 #include <rime/translation.h>
 
 namespace rime {
@@ -16,11 +17,11 @@ class ContextualTranslation : public PrefetchTranslation {
  public:
   ContextualTranslation(an<Translation> translation,
                         string input,
-                        string preceding_text,
+                        GrammarContext preceding_context,
                         Grammar* grammar)
       : PrefetchTranslation(translation),
         input_(input),
-        preceding_text_(preceding_text),
+        preceding_context_(std::move(preceding_context)),
         grammar_(grammar) {}
 
  protected:
@@ -31,7 +32,7 @@ class ContextualTranslation : public PrefetchTranslation {
   void AppendToCache(vector<of<Phrase>>& queue);
 
   string input_;
-  string preceding_text_;
+  GrammarContext preceding_context_;
   Grammar* grammar_;
 };
 

@@ -40,7 +40,7 @@ bool ContextualTranslation::Replenish() {
 
 an<Phrase> ContextualTranslation::Evaluate(an<Phrase> phrase) {
   bool is_rear = phrase->end() == input_.length();
-  double weight = Grammar::Evaluate(preceding_text_, phrase->text(),
+  double weight = Grammar::Evaluate(preceding_context_, phrase->text(),
                                     phrase->weight(), is_rear, grammar_);
   phrase->set_weight(weight);
   DLOG(INFO) << "contextual suggestion: " << phrase->text()

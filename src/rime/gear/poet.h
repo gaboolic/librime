@@ -56,7 +56,9 @@ class Poet {
     if (preceding_text.empty()) {
       return translation;
     }
-    return New<ContextualTranslation>(translation, input, preceding_text,
+    return New<ContextualTranslation>(translation,
+                                      input,
+                                      GrammarContext::FromRawText(preceding_text),
                                       grammar_.get());
   }
 
@@ -71,6 +73,7 @@ class Poet {
   const Language* language_;
   the<Grammar> grammar_;
   Compare compare_;
+  double no_grammar_penalty_ = -13.815510557964274;
 };
 
 }  // namespace rime

@@ -58,6 +58,25 @@ struct Line {
                : predecessor->last_word() + last_word();
   }
 
+  vector<string> history_tokens(size_t max_tokens = 2) const {
+    vector<string> tokens;
+    if (empty()) {
+      return tokens;
+    }
+    for (const Line* cursor = this; cursor && !cursor->empty(); cursor = cursor->predecessor) {
+      if (tokens.size() >= max_tokens) {
+        break;
+      }
+      tokens.push_back(cursor->last_word());
+    }
+    std::reverse(tokens.begin(), tokens.end());
+    return tokens;
+  }
+
+  GrammarContext grammar_context() const {
+    return GrammarContext{context(), history_tokens()};
+  }
+
   vector<size_t> word_lengths() const {
     vector<size_t> lengths;
     size_t last_end_pos = 0;
@@ -90,8 +109,13 @@ inline static Grammar* create_grammar(Config* config) {
 Poet::Poet(const Language* language, Config* config, Compare compare)
     : language_(language),
       grammar_(create_grammar(config)),
-      compare_(compare) {}
-
+      compare_(compare) {
+  // Default keeps the legacy grammar-less fallback penalty: log(1e-6).
+  // Override grammar/no_grammar_penalty in schema config to tune segmentation.
+  if (config) {
+    config->GetDouble("grammar/no_grammar_penalty", &no_grammar_penalty_);
+  }
+}
 Poet::~Poet() {}
 
 bool Poet::CompareWeight(const Line& one, const Line& other) {
@@ -105,13 +129,14 @@ bool Poet::LeftAssociateCompare(const Line& one, const Line& other) {
   if (one.weight == other.weight) {
     auto one_word_lens = one.word_lengths();
     auto other_word_lens = other.word_lengths();
-    // less words is more favorable
-    if (one_word_lens.size() > other_word_lens.size())
+    // When scores tie, avoid over-merging adjacent words into longer chunks.
+    // Prefer finer-grained segmentations over fewer merged words.
+    if (one_word_lens.size() < other_word_lens.size())
       return true;
     if (one_word_lens.size() == other_word_lens.size()) {
       return std::lexicographical_compare(
-          one_word_lens.begin(), one_word_lens.end(), other_word_lens.begin(),
-          other_word_lens.end());
+          other_word_lens.begin(), other_word_lens.end(), one_word_lens.begin(),
+          one_word_lens.end());
     }
   }
   return false;
@@ -271,11 +296,15 @@ vector<an<Sentence>> Poet::MakeSentencesWithStrategy(
         // extend candidates with dict entries on a valid edge.
         const DictEntryList& entries = ev.second;
         for (const auto& entry : entries) {
-          const string& context =
-              candidate.empty() ? preceding_text : candidate.context();
-          double weight = candidate.weight +
-                          Grammar::Evaluate(context, entry->text, entry->weight,
-                                            is_rear, grammar_.get());
+          const GrammarContext context =
+              candidate.empty() ? GrammarContext::FromRawText(preceding_text)
+                                : candidate.grammar_context();
+          double delta = grammar_
+                             ? Grammar::Evaluate(context, entry->text,
+                                                 entry->weight, is_rear,
+                                                 grammar_.get())
+                             : entry->weight + no_grammar_penalty_;
+          double weight = candidate.weight + delta;
           Line new_line{&candidate, entry.get(), end_pos, weight};
           DLOG(INFO) << "updated line ending at " << end_pos
                      << " with text: ..." << new_line.last_word()
