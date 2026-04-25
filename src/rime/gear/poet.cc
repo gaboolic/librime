@@ -218,10 +218,10 @@ an<Sentence> Poet::MakeSentenceWithStrategy(const WordGraph& graph,
         for (const auto& entry : entries) {
           const string& context =
               candidate.empty() ? preceding_text : candidate.context();
-          double weight = candidate.weight +
-                          Grammar::Evaluate(context, entry->text, entry->weight,
-                                            is_rear, grammar_.get(),
-                                            no_grammar_penalty_);
+          double weight =
+              candidate.weight +
+              Grammar::Evaluate(context, entry->text, entry->weight, is_rear,
+                                grammar_.get(), no_grammar_penalty_);
           Line new_line{&candidate, entry.get(), end_pos, weight};
           Line& best = Strategy::BestLineToUpdate(target_state, new_line);
           if (best.empty() || compare_(best, new_line)) {

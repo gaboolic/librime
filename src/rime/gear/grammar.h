@@ -17,16 +17,16 @@ class Grammar : public Class<Grammar, Config*> {
                        const string& word,
                        bool is_rear) = 0;
 
-  inline static double Evaluate(const string& context,
-                                const string& entry_text,
-                                double entry_weight,
-                                bool is_rear,
-                                Grammar* grammar,
-                                double no_grammar_penalty =
-                                    kDefaultNoGrammarPenalty) {
-    return entry_weight +
-           (grammar ? grammar->Query(context, entry_text, is_rear)
-                    : no_grammar_penalty);
+  inline static double Evaluate(
+      const string& context,
+      const string& entry_text,
+      double entry_weight,
+      bool is_rear,
+      Grammar* grammar,
+      double no_grammar_penalty = kDefaultNoGrammarPenalty) {
+    return entry_weight + (grammar
+                               ? grammar->Query(context, entry_text, is_rear)
+                               : no_grammar_penalty);
   }
 };
 
