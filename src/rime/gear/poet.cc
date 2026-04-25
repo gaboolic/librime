@@ -80,7 +80,12 @@ inline static Grammar* create_grammar(Config* config) {
 Poet::Poet(const Language* language, Config* config, Compare compare)
     : language_(language),
       grammar_(create_grammar(config)),
-      compare_(compare) {}
+      no_grammar_penalty_(Grammar::kDefaultNoGrammarPenalty),
+      compare_(compare) {
+  if (config) {
+    config->GetDouble("grammar/no_grammar_penalty", &no_grammar_penalty_);
+  }
+}
 
 Poet::~Poet() {}
 
@@ -215,7 +220,8 @@ an<Sentence> Poet::MakeSentenceWithStrategy(const WordGraph& graph,
               candidate.empty() ? preceding_text : candidate.context();
           double weight = candidate.weight +
                           Grammar::Evaluate(context, entry->text, entry->weight,
-                                            is_rear, grammar_.get());
+                                            is_rear, grammar_.get(),
+                                            no_grammar_penalty_);
           Line new_line{&candidate, entry.get(), end_pos, weight};
           Line& best = Strategy::BestLineToUpdate(target_state, new_line);
           if (best.empty() || compare_(best, new_line)) {

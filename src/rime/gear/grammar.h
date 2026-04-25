@@ -10,6 +10,8 @@ class Config;
 
 class Grammar : public Class<Grammar, Config*> {
  public:
+  static constexpr double kDefaultNoGrammarPenalty = -13.815510557964274;
+
   virtual ~Grammar() {}
   virtual double Query(const string& context,
                        const string& word,
@@ -19,11 +21,12 @@ class Grammar : public Class<Grammar, Config*> {
                                 const string& entry_text,
                                 double entry_weight,
                                 bool is_rear,
-                                Grammar* grammar) {
-    // log(1e-6) ≈ -13.81
-    const double kPenalty = -13.815510557964274;
+                                Grammar* grammar,
+                                double no_grammar_penalty =
+                                    kDefaultNoGrammarPenalty) {
     return entry_weight +
-           (grammar ? grammar->Query(context, entry_text, is_rear) : kPenalty);
+           (grammar ? grammar->Query(context, entry_text, is_rear)
+                    : no_grammar_penalty);
   }
 };
 

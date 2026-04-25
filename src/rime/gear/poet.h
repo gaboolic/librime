@@ -64,6 +64,7 @@ class Poet {
 
   const Language* language_;
   the<Grammar> grammar_;
+  double no_grammar_penalty_;
   Compare compare_;
 };
 
