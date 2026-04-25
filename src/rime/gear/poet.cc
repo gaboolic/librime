@@ -71,9 +71,14 @@ struct Line {
 const Line Line::kEmpty{nullptr, nullptr, 0, 0.0};
 
 inline static Grammar* create_grammar(Config* config) {
-  if (auto* grammar = Grammar::Require("grammar")) {
-    return grammar->Create(config);
+  if (auto* component = Grammar::Require("grammar")) {
+    auto* grammar = component->Create(config);
+    LOG(INFO) << "grammar component "
+              << (grammar ? "created; using grammar query scores"
+                          : "returned null; using no_grammar_penalty fallback");
+    return grammar;
   }
+  LOG(INFO) << "grammar component not found; using no_grammar_penalty fallback";
   return nullptr;
 }
 
@@ -82,9 +87,16 @@ Poet::Poet(const Language* language, Config* config, Compare compare)
       grammar_(create_grammar(config)),
       no_grammar_penalty_(Grammar::kDefaultNoGrammarPenalty),
       compare_(compare) {
+  bool configured = false;
   if (config) {
-    config->GetDouble("grammar/no_grammar_penalty", &no_grammar_penalty_);
+    configured =
+        config->GetDouble("grammar/no_grammar_penalty", &no_grammar_penalty_);
   }
+  LOG(INFO) << "grammar/no_grammar_penalty = " << no_grammar_penalty_
+            << (configured ? " (configured)" : " (default)")
+            << "; grammar query is " << (grammar_ ? "enabled" : "unavailable")
+            << (grammar_ ? ", fallback penalty is not used"
+                         : ", fallback penalty is active");
 }
 
 Poet::~Poet() {}
