@@ -15,15 +15,28 @@ class Grammar : public Class<Grammar, Config*> {
                        const string& word,
                        bool is_rear) = 0;
 
+  static double DefaultPenalty() {
+    // log(1e-6) ~= -13.81
+    return -13.815510557964274;
+  }
+
   inline static double Evaluate(const string& context,
                                 const string& entry_text,
                                 double entry_weight,
                                 bool is_rear,
                                 Grammar* grammar) {
-    // log(1e-6) ≈ -13.81
-    const double kPenalty = -13.815510557964274;
+    return Evaluate(context, entry_text, entry_weight, is_rear, grammar,
+                    DefaultPenalty());
+  }
+
+  inline static double Evaluate(const string& context,
+                                const string& entry_text,
+                                double entry_weight,
+                                bool is_rear,
+                                Grammar* grammar,
+                                double penalty) {
     return entry_weight +
-           (grammar ? grammar->Query(context, entry_text, is_rear) : kPenalty);
+           (grammar ? grammar->Query(context, entry_text, is_rear) : penalty);
   }
 };
 

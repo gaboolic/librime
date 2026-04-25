@@ -33,6 +33,7 @@ class Poet {
 
   Poet(const Language* language,
        Config* config,
+       const string& name_space,
        Compare compare = CompareWeight);
   ~Poet();
 
@@ -64,6 +65,7 @@ class Poet {
 
   const Language* language_;
   the<Grammar> grammar_;
+  double grammar_penalty_;
   Compare compare_;
 };
 

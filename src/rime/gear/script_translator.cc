@@ -185,7 +185,7 @@ ScriptTranslator::ScriptTranslator(const Ticket& ticket)
       enable_word_completion_ = enable_completion_;
     }
     config->GetInt(name_space_ + "/max_homophones", &max_homophones_);
-    poet_.reset(new Poet(language(), config));
+    poet_.reset(new Poet(language(), config, name_space_));
   }
   if (enable_correction_) {
     if (auto* corrector = Corrector::Require("corrector")) {

@@ -77,10 +77,18 @@ inline static Grammar* create_grammar(Config* config) {
   return nullptr;
 }
 
-Poet::Poet(const Language* language, Config* config, Compare compare)
+Poet::Poet(const Language* language,
+           Config* config,
+           const string& name_space,
+           Compare compare)
     : language_(language),
       grammar_(create_grammar(config)),
-      compare_(compare) {}
+      grammar_penalty_(Grammar::DefaultPenalty()),
+      compare_(compare) {
+  if (config) {
+    config->GetDouble(name_space + "/grammar_penalty", &grammar_penalty_);
+  }
+}
 
 Poet::~Poet() {}
 
@@ -215,7 +223,8 @@ an<Sentence> Poet::MakeSentenceWithStrategy(const WordGraph& graph,
               candidate.empty() ? preceding_text : candidate.context();
           double weight = candidate.weight +
                           Grammar::Evaluate(context, entry->text, entry->weight,
-                                            is_rear, grammar_.get());
+                                            is_rear, grammar_.get(),
+                                            grammar_penalty_);
           Line new_line{&candidate, entry.get(), end_pos, weight};
           Line& best = Strategy::BestLineToUpdate(target_state, new_line);
           if (best.empty() || compare_(best, new_line)) {
