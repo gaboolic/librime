@@ -77,6 +77,9 @@ inline static Grammar* create_grammar(Config* config) {
   return nullptr;
 }
 
+Poet::Poet(const Language* language, Config* config, Compare compare)
+    : Poet(language, config, string(), compare) {}
+
 Poet::Poet(const Language* language,
            Config* config,
            const string& name_space,
@@ -85,7 +88,7 @@ Poet::Poet(const Language* language,
       grammar_(create_grammar(config)),
       grammar_penalty_(Grammar::DefaultPenalty()),
       compare_(compare) {
-  if (config) {
+  if (config && !name_space.empty()) {
     config->GetDouble(name_space + "/grammar_penalty", &grammar_penalty_);
   }
 }

@@ -33,6 +33,9 @@ class Poet {
 
   Poet(const Language* language,
        Config* config,
+       Compare compare = CompareWeight);
+  Poet(const Language* language,
+       Config* config,
        const string& name_space,
        Compare compare = CompareWeight);
   ~Poet();
