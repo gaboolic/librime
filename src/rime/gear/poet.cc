@@ -557,17 +557,14 @@ deque<an<Sentence>> Poet::MakeSentencesWithoutGrammar(
   return sentences;
 }
 
-// Make `max_sentences` sentences using beam search and dp on word graph.
+// Make `max_sentences` sentences using official beam search on word graph.
 deque<an<Sentence>> Poet::MakeSentences(const WordGraph& graph,
                                         size_t total_length,
                                         const string& preceding_text,
                                         size_t max_sentences,
                                         double cutoff_threshold) {
-  return contextual_suggestions_enabled_ && grammar_
-             ? MakeSentencesWithGrammar(graph, total_length, preceding_text,
-                                        max_sentences, cutoff_threshold)
-             : MakeSentencesWithoutGrammar(graph, total_length, preceding_text,
-                                           max_sentences);
+  return MakeSentencesWithGrammar(graph, total_length, preceding_text,
+                                  max_sentences, cutoff_threshold);
 }
 
 }  // namespace rime
