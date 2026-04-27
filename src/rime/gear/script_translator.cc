@@ -195,6 +195,8 @@ ScriptTranslator::ScriptTranslator(const Ticket& ticket)
       enable_word_completion_ = enable_completion_;
     }
     config->GetInt(name_space_ + "/max_homophones", &max_homophones_);
+    config->GetInt(name_space_ + "/sentence_max_homophones",
+                   &sentence_max_homophones_);
     poet_.reset(new Poet(language(), config));
   }
   if (enable_correction_) {
@@ -492,9 +494,10 @@ bool ScriptTranslation::Evaluate(Dictionary* dict, UserDictionary* user_dict) {
              << ", has_reliable_phrase: " << has_reliable_phrase
              << ", has_reliable_user_phrase: " << has_reliable_user_phrase
              << ", has_at_least_two_syllables: " << has_at_least_two_syllables;
-  // make sentences when there is no exact-matching phrase candidate
-  if (has_at_least_two_syllables && !has_reliable_phrase &&
-      !has_reliable_user_phrase) {
+  // Keep sentence candidates even when there is an exact user phrase, so the
+  // menu can show both the memorized phrase and alternative whole-sentence
+  // paths. An exact system phrase still suppresses sentence making.
+  if (has_at_least_two_syllables && !has_reliable_phrase) {
     if (max_sentences_ > 1)
       sentences_ = MakeSentences(dict, user_dict);
     else if (max_sentences_) {
@@ -685,7 +688,7 @@ void ScriptTranslation::EnrollEntries(
   if (query_result) {
     for (auto& y : *query_result) {
       DictEntryList& homophones = entries_by_end_pos[y.first];
-      while (homophones.size() < translator_->max_homophones() &&
+      while (homophones.size() < translator_->sentence_max_homophones() &&
              !y.second.exhausted()) {
         homophones.push_back(y.second.Peek());
         if (!y.second.Next())

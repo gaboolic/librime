@@ -8,6 +8,7 @@
 //
 #include <algorithm>
 #include <functional>
+#include <list>
 #include <rime/candidate.h>
 #include <rime/config.h>
 #include <rime/dict/vocabulary.h>
@@ -72,16 +73,39 @@ struct Line {
 const Line Line::kEmpty{nullptr, nullptr, 0, 0.0, 0};
 
 inline static Grammar* create_grammar(Config* config) {
+  if (!config || !config->IsMap("grammar")) {
+    return nullptr;
+  }
+  string language;
+  string model_path;
+  if (!config->GetString("grammar/language", &language) &&
+      !config->GetString("grammar/model_path", &model_path)) {
+    return nullptr;
+  }
   if (auto* grammar = Grammar::Require("grammar")) {
     return grammar->Create(config);
   }
   return nullptr;
 }
 
+inline static bool is_contextual_suggestions_enabled(Config* config) {
+  bool contextual_suggestions = false;
+  return config &&
+         config->GetBool("translator/contextual_suggestions",
+                         &contextual_suggestions) &&
+         contextual_suggestions;
+}
+
 Poet::Poet(const Language* language, Config* config, Compare compare)
     : language_(language),
       grammar_(create_grammar(config)),
-      compare_(compare) {}
+      compare_(compare),
+      contextual_suggestions_enabled_(
+          is_contextual_suggestions_enabled(config)) {
+  if (config) {
+    config->GetDouble("grammar/no_grammar_penalty", &no_grammar_penalty_);
+  }
+}
 
 Poet::~Poet() {}
 
@@ -108,8 +132,27 @@ bool Poet::LeftAssociateCompare(const Line& one, const Line& other) {
   return false;
 }
 
+using LineList = std::list<Line>;
 // keep the best line candidate per last phrase
 using LineCandidates = hash_map<string, Line>;
+// keep multiple line candidates per last phrase
+using MultiLineCandidates = hash_map<string, LineList>;
+
+static void insert_top_candidate(LineList& candidates,
+                                 const Line& new_line,
+                                 Poet::Compare compare,
+                                 size_t limit) {
+  if (limit == 0)
+    return;
+  auto pos = candidates.begin();
+  while (pos != candidates.end() && !compare(*pos, new_line)) {
+    ++pos;
+  }
+  candidates.insert(pos, new_line);
+  if (candidates.size() > limit) {
+    candidates.pop_back();
+  }
+}
 
 template <int N>
 static vector<const Line*> find_top_candidates(const LineCandidates& candidates,
@@ -125,6 +168,29 @@ static vector<const Line*> find_top_candidates(const LineCandidates& candidates,
     top.insert(pos, &candidate.second);
     if (top.size() > N)
       top.pop_back();
+  }
+  return top;
+}
+
+static vector<const Line*> find_top_candidates(
+    const MultiLineCandidates& candidates,
+    Poet::Compare compare,
+    size_t limit) {
+  vector<const Line*> top;
+  if (limit == 0)
+    return top;
+  top.reserve(limit + 1);
+  for (const auto& group : candidates) {
+    for (const auto& candidate : group.second) {
+      auto pos = std::upper_bound(
+          top.begin(), top.end(), &candidate,
+          [&](const Line* a, const Line* b) { return compare(*b, *a); });
+      if (static_cast<size_t>(pos - top.begin()) >= limit)
+        continue;
+      top.insert(pos, &candidate);
+      if (top.size() > limit)
+        top.pop_back();
+    }
   }
   return top;
 }
@@ -150,43 +216,114 @@ struct BeamSearch {
     }
   }
 
-  static Line& BestLineToUpdate(State& state, const Line& new_line) {
-    const auto& key = new_line.last_word();
-    return state[key];
+  static void UpdateState(State& state,
+                          const Line& new_line,
+                          Poet::Compare compare) {
+    Line& best = state[new_line.last_word()];
+    if (best.empty() || compare(best, new_line)) {
+      best = new_line;
+    }
   }
 
-  static const Line& BestLineInState(const State& final_state,
-                                     Poet::Compare compare) {
+  static vector<const Line*> TopLinesInState(const State& final_state,
+                                             Poet::Compare compare,
+                                             size_t limit) {
+    vector<const Line*> top_lines;
+    if (limit == 0)
+      return top_lines;
     const Line* best = nullptr;
     for (const auto& candidate : final_state) {
       if (!best || compare(*best, candidate.second)) {
         best = &candidate.second;
       }
     }
-    return best ? *best : Line::kEmpty;
+    if (best && !best->empty())
+      top_lines.push_back(best);
+    return top_lines;
   }
 };
 
 struct DynamicProgramming {
-  using State = Line;
+  using State = LineList;
 
-  static void Initiate(State& initial_state) { initial_state = Line::kEmpty; }
+  static constexpr int kMaxLineCandidates = 32;
+
+  static void Initiate(State& initial_state) { initial_state.push_back(Line::kEmpty); }
 
   static void ForEachCandidate(const State& state,
                                Poet::Compare compare,
                                UpdateLineCandidate update) {
-    update(state);
+    for (const auto& candidate : state) {
+      update(candidate);
+    }
   }
 
-  static Line& BestLineToUpdate(State& state, const Line& new_line) {
-    return state;
+  static void UpdateState(State& state,
+                          const Line& new_line,
+                          Poet::Compare compare) {
+    insert_top_candidate(state, new_line, compare, kMaxLineCandidates);
   }
 
-  static const Line& BestLineInState(const State& final_state,
-                                     Poet::Compare compare) {
-    return final_state;
+  static vector<const Line*> TopLinesInState(const State& final_state,
+                                             Poet::Compare compare,
+                                             size_t limit) {
+    vector<const Line*> top_lines;
+    if (limit == 0)
+      return top_lines;
+    top_lines.reserve((std::min)(limit, final_state.size()));
+    for (const auto& line : final_state) {
+      if (top_lines.size() >= limit)
+        break;
+      top_lines.push_back(&line);
+    }
+    return top_lines;
   }
 };
+
+struct LegacyBeamSearch {
+  using State = MultiLineCandidates;
+
+  static constexpr int kMaxLineCandidates = 7;
+
+  static void Initiate(State& initial_state) {
+    initial_state[""].push_back(Line::kEmpty);
+  }
+
+  static void ForEachCandidate(const State& state,
+                               Poet::Compare compare,
+                               UpdateLineCandidate update) {
+    auto top_candidates = find_top_candidates(state, compare,
+                                              kMaxLineCandidates);
+    for (const auto* candidate : top_candidates) {
+      update(*candidate);
+    }
+  }
+
+  static void UpdateState(State& state,
+                          const Line& new_line,
+                          Poet::Compare compare) {
+    insert_top_candidate(state[new_line.last_word()], new_line, compare,
+                         kMaxLineCandidates);
+  }
+
+  static vector<const Line*> TopLinesInState(const State& final_state,
+                                             Poet::Compare compare,
+                                             size_t limit) {
+    return find_top_candidates(final_state, compare, limit);
+  }
+};
+
+an<Sentence> Poet::MakeSentenceFromLine(const Line& line) const {
+  if (line.empty())
+    return nullptr;
+  auto sentence = New<Sentence>(language_);
+  for (const auto* c : line.components()) {
+    if (!c->entry)
+      continue;
+    sentence->Extend(*c->entry, c->end_pos, c->weight);
+  }
+  return sentence;
+}
 
 template <class Strategy>
 an<Sentence> Poet::MakeSentenceWithStrategy(const WordGraph& graph,
@@ -214,17 +351,17 @@ an<Sentence> Poet::MakeSentenceWithStrategy(const WordGraph& graph,
         for (const auto& entry : entries) {
           const string& context =
               candidate.empty() ? preceding_text : candidate.context();
-          double weight = candidate.weight +
-                          Grammar::Evaluate(context, entry->text, entry->weight,
-                                            is_rear, grammar_.get());
+          double delta = grammar_
+                             ? Grammar::Evaluate(context, entry->text,
+                                                 entry->weight, is_rear,
+                                                 grammar_.get())
+                             : entry->weight + no_grammar_penalty_;
+          double weight = candidate.weight + delta;
           Line new_line{&candidate, entry.get(), end_pos, weight};
-          Line& best = Strategy::BestLineToUpdate(target_state, new_line);
-          if (best.empty() || compare_(best, new_line)) {
-            DLOG(INFO) << "updated line ending at " << end_pos
-                       << " with text: ..." << new_line.last_word()
-                       << " weight: " << new_line.weight;
-            best = new_line;
-          }
+          DLOG(INFO) << "updated line ending at " << end_pos
+                     << " with text: ..." << new_line.last_word()
+                     << " weight: " << new_line.weight;
+          Strategy::UpdateState(target_state, new_line, compare_);
         }
       }
     };
@@ -233,33 +370,84 @@ an<Sentence> Poet::MakeSentenceWithStrategy(const WordGraph& graph,
   auto found = states.find(total_length);
   if (found == states.end() || found->second.empty())
     return nullptr;
-  const Line& best = Strategy::BestLineInState(found->second, compare_);
-  auto sentence = New<Sentence>(language_);
-  for (const auto* c : best.components()) {
-    if (!c->entry)
-      continue;
-    sentence->Extend(*c->entry, c->end_pos, c->weight);
-  }
-  return sentence;
+  auto top_lines = Strategy::TopLinesInState(found->second, compare_, 1);
+  return top_lines.empty() ? nullptr : MakeSentenceFromLine(*top_lines.front());
 }
 
 an<Sentence> Poet::MakeSentence(const WordGraph& graph,
                                 size_t total_length,
                                 const string& preceding_text) {
-  return grammar_ ? MakeSentenceWithStrategy<BeamSearch>(graph, total_length,
-                                                         preceding_text)
+  return grammar_ ? MakeSentenceWithStrategy<LegacyBeamSearch>(
+                        graph, total_length, preceding_text)
                   : MakeSentenceWithStrategy<DynamicProgramming>(
                         graph, total_length, preceding_text);
 }
 
-// Make `max_sentences` sentences using beam search and dp on word graph.
-//
-// There is no strategy because it unconditionally use grammar.
-deque<an<Sentence>> Poet::MakeSentences(const WordGraph& graph,
-                                        size_t total_length,
-                                        const string& preceding_text,
-                                        size_t max_sentences,
-                                        double cutoff_threshold) {
+template <class Strategy>
+vector<an<Sentence>> Poet::MakeSentencesWithStrategy(
+    const WordGraph& graph,
+    size_t total_length,
+    const string& preceding_text,
+    size_t count) {
+  vector<an<Sentence>> sentences;
+  if (count == 0)
+    return sentences;
+  map<int, typename Strategy::State> states;
+  Strategy::Initiate(states[0]);
+  for (const auto& sv : graph) {
+    size_t start_pos = sv.first;
+    if (states.find(start_pos) == states.end())
+      continue;
+    DLOG(INFO) << "start pos: " << start_pos;
+    const auto& source_state = states[start_pos];
+    const auto update = [this, &states, &sv, start_pos, total_length,
+                         &preceding_text](const Line& candidate) {
+      for (const auto& ev : sv.second) {
+        size_t end_pos = ev.first;
+        if (start_pos == 0 && end_pos == total_length)
+          continue;  // exclude single word from the result
+        DLOG(INFO) << "end pos: " << end_pos;
+        bool is_rear = end_pos == total_length;
+        auto& target_state = states[end_pos];
+        const DictEntryList& entries = ev.second;
+        for (const auto& entry : entries) {
+          const string& context =
+              candidate.empty() ? preceding_text : candidate.context();
+          double delta = grammar_
+                             ? Grammar::Evaluate(context, entry->text,
+                                                 entry->weight, is_rear,
+                                                 grammar_.get())
+                             : entry->weight + no_grammar_penalty_;
+          double weight = candidate.weight + delta;
+          Line new_line{&candidate, entry.get(), end_pos, weight};
+          DLOG(INFO) << "updated line ending at " << end_pos
+                     << " with text: ..." << new_line.last_word()
+                     << " weight: " << new_line.weight;
+          Strategy::UpdateState(target_state, new_line, compare_);
+        }
+      }
+    };
+    Strategy::ForEachCandidate(source_state, compare_, update);
+  }
+  auto found = states.find(total_length);
+  if (found == states.end() || found->second.empty())
+    return sentences;
+  auto top_lines = Strategy::TopLinesInState(found->second, compare_, count);
+  sentences.reserve(top_lines.size());
+  for (const auto* line : top_lines) {
+    if (auto sentence = MakeSentenceFromLine(*line)) {
+      sentences.push_back(sentence);
+    }
+  }
+  return sentences;
+}
+
+deque<an<Sentence>> Poet::MakeSentencesWithGrammar(
+    const WordGraph& graph,
+    size_t total_length,
+    const string& preceding_text,
+    size_t max_sentences,
+    double cutoff_threshold) {
   size_t beam_width =
       max_sentences * 3;  // allow more possibilities during search
   using State = std::list<Line>;
@@ -350,6 +538,36 @@ deque<an<Sentence>> Poet::MakeSentences(const WordGraph& graph,
     results.emplace_back(sentence);
   }
   return results;
+}
+
+deque<an<Sentence>> Poet::MakeSentencesWithoutGrammar(
+    const WordGraph& graph,
+    size_t total_length,
+    const string& preceding_text,
+    size_t count) {
+  deque<an<Sentence>> sentences;
+  auto candidates =
+      grammar_ ? MakeSentencesWithStrategy<LegacyBeamSearch>(
+                     graph, total_length, preceding_text, count)
+               : MakeSentencesWithStrategy<DynamicProgramming>(
+                     graph, total_length, preceding_text, count);
+  for (auto& sentence : candidates) {
+    sentences.emplace_back(sentence);
+  }
+  return sentences;
+}
+
+// Make `max_sentences` sentences using beam search and dp on word graph.
+deque<an<Sentence>> Poet::MakeSentences(const WordGraph& graph,
+                                        size_t total_length,
+                                        const string& preceding_text,
+                                        size_t max_sentences,
+                                        double cutoff_threshold) {
+  return contextual_suggestions_enabled_ && grammar_
+             ? MakeSentencesWithGrammar(graph, total_length, preceding_text,
+                                        max_sentences, cutoff_threshold)
+             : MakeSentencesWithoutGrammar(graph, total_length, preceding_text,
+                                           max_sentences);
 }
 
 }  // namespace rime

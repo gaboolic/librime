@@ -62,14 +62,31 @@ class Poet {
   }
 
  private:
+  an<Sentence> MakeSentenceFromLine(const Line& line) const;
   template <class Strategy>
   an<Sentence> MakeSentenceWithStrategy(const WordGraph& graph,
                                         size_t total_length,
                                         const string& preceding_text);
+  template <class Strategy>
+  vector<an<Sentence>> MakeSentencesWithStrategy(const WordGraph& graph,
+                                                 size_t total_length,
+                                                 const string& preceding_text,
+                                                 size_t count);
+  deque<an<Sentence>> MakeSentencesWithoutGrammar(const WordGraph& graph,
+                                                  size_t total_length,
+                                                  const string& preceding_text,
+                                                  size_t count);
+  deque<an<Sentence>> MakeSentencesWithGrammar(const WordGraph& graph,
+                                               size_t total_length,
+                                               const string& preceding_text,
+                                               size_t count,
+                                               double cutoff_threshold);
 
   const Language* language_;
   the<Grammar> grammar_;
   Compare compare_;
+  double no_grammar_penalty_ = -13.815510557964274;
+  bool contextual_suggestions_enabled_ = false;
 };
 
 }  // namespace rime
