@@ -32,17 +32,29 @@ if %slug% == %plugin% (
 )
 set plugin_project=%slug:*/=%
 set plugin_dir=plugins\%plugin_project:librime-=%
-git clone %clone_options% "https://github.com/%slug%.git" %plugin_dir%
-if errorlevel 1 exit /b
-rem pull request ref doesn't work with git clone --branch
-if not [%branch%] == [] (
-   git -C %plugin_dir% checkout %branch%
-   if errorlevel 1 exit /b
+set plugin_fresh_clone=
+if exist %plugin_dir% (
+  echo Updating %plugin% in %plugin_dir%
+  if not [%branch%] == [] (
+    git -C %plugin_dir% checkout %branch%
+    if errorlevel 1 exit /b
+  )
+  git -C %plugin_dir% pull
+  if errorlevel 1 exit /b
+) else (
+  git clone %clone_options% "https://github.com/%slug%.git" %plugin_dir%
+  if errorlevel 1 exit /b
+  set plugin_fresh_clone=1
+  rem pull request ref doesn't work with git clone --branch
+  if not [%branch%] == [] (
+     git -C %plugin_dir% checkout %branch%
+     if errorlevel 1 exit /b
+  )
 )
 :action_install_plugin
 echo %plugin% >> version-info.txt
 git -C %plugin_dir% describe --always >> version-info.txt
-if exist %plugin_dir%\action-install.bat (
+if defined plugin_fresh_clone if exist %plugin_dir%\action-install.bat (
   pushd %plugin_dir%
   call action-install.bat
   if errorlevel 1 exit /b

@@ -1,0 +1,5 @@
+RIME_PLUGINS=lotem/librime-octagram 
+librime 
+462292f0
+lotem/librime-octagram 
+dfcc151

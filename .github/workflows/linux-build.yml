@@ -6,6 +6,9 @@ on:
         default: ${{ github.repository }}
         required: false
         type: string
+      rime_plugins:
+        required: false
+        type: string
 
 jobs:
   build:
@@ -17,8 +20,10 @@ jobs:
         include:
           - compiler: gcc
             cxx_compiler: g++
+            build_variant: gcc
           - compiler: clang
             cxx_compiler: clang++
+            build_variant: clang
     env:
       CC: ${{ matrix.compiler }}
       CXX: ${{ matrix.cxx_compiler }}
@@ -32,7 +37,25 @@ jobs:
       - name: Install dependency
         run: ./action-install-linux.sh
 
+      - name: Install Rime plugins
+        run: ./install-plugins.sh lotem/librime-octagram
+
       - name: Build and test
         run: make test
         env:
           CMAKE_GENERATOR: Ninja
+
+      - name: Create distributable
+        
+        run: |
+          sudo make install
+          tar -cjvf rime-${{ env.git_ref_name }}-${{ runner.os }}-${{ matrix.build_variant || runner.arch }}.tar.bz2 \
+          build
+
+      - name: Upload artifacts
+        
+        uses: actions/upload-artifact@v4
+        with:
+          name: artifact-${{ runner.os }}-${{ matrix.build_variant || runner.arch }}
+          path: |
+            rime-${{ env.git_ref_name }}-${{ runner.os }}-${{ matrix.build_variant || runner.arch }}.tar.bz2

@@ -177,6 +177,14 @@ if %build_deps% == 1 (
 
 if %build_librime% == 0 goto exit
 
+if defined RIME_PLUGINS (
+echo.
+echo installing Rime plugins.
+echo.
+call .\action-install-plugins-windows.bat
+if errorlevel 1 goto error
+)
+
 set rime_cmake_flags=%common_cmake_flags%^
  -DBUILD_STATIC=ON^
  -DBUILD_SHARED_LIBS=%build_shared%^
