@@ -171,7 +171,7 @@ class ScriptTranslation : public Translation {
 
   const size_t max_corrections_ = 4;
   size_t correction_count_ = 0;
-  int max_sentences_ = 1;
+  int max_sentences_ = 3;
   double sentence_cutoff_threshold_ = 0.1;
 
   bool enable_correction_;
