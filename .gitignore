@@ -15,6 +15,7 @@ node_modules/
 *~
 .*.swp
 .cache/
+.deps/
 *.7z
 .DS_Store
 build-bert-grammar
